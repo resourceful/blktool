@@ -1,0 +1,11 @@
+blktool README
+
+Every once in a while I need to parse a very large blkparsed data--some 
+are over 70GB. This is a tool to parse such data, and I am planning to 
+add some useful feasibilities. I thought of making the program in other 
+language, but processing such large files are often very slow on script 
+languages.
+
+blkparse already provide rich formatting syntax. This is not an effort to 
+rewrite it, but to provide fast or easier workaround for some of tedious 
+tasks I often encounter.
