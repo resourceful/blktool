@@ -13,6 +13,9 @@ CFLAGS =
 all :
 	gcc -o $(EXENAME) $(SRC) $(CFLAGS)
 
+debug :
+	gcc -g -o $(EXENAME) $(SRC) $(CFLAGS)
+
 clean :
 	@rm -rf $(EXENAME)
 
