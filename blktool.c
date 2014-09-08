@@ -226,7 +226,7 @@ int     main    (int argc, char *argv [])
         char    buf [BUFSIZ];           /* a buffer                     */
         char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
         int     c;                      /* general-purpose              */
-        int     SkipLine = 0;           /* Skip if pattern match fails  */
+        int     SkipLine = 0;           /* pattern match checker        */
         int     idx;                    /* token index                  */
         FILE    *infp;                  /* input file                   */
         FILE    *outfp;                 /* output file                  */
@@ -299,6 +299,8 @@ int     main    (int argc, char *argv [])
                 while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
                         /*      we have to point to buf */
                         strptr = buf;
+                        /* set SkipLine to zero for next iteration */
+                        SkipLine = 0;
                         /*      take the line apart     */
                         idx = 1; 
                         while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
@@ -336,13 +338,15 @@ int     main    (int argc, char *argv [])
                                else if (idx == 8) // Sector No
                                {
                                        strcpy (SECTORNO, tokptr);
+                                       if (match ("[*", tokptr))
+                                              SkipLine = 1;
                                        idx++; 
                                }
                                else if (idx == 9) // + Separator but check for [0]
                                {
-                                       idx++; 
                                        if (!match ("+", tokptr))
                                               SkipLine = 1;
+                                       idx++; 
                                }
                                else if (idx == 10) // Length 
                                {
@@ -351,9 +355,9 @@ int     main    (int argc, char *argv [])
                                }
                                else if (idx == 11) // ( separator or [0]
                                {
-                                       idx++; 
-                                       if (!match ("+", tokptr))
+                                       if (!match ("(", tokptr))
                                               SkipLine = 1;
+                                       idx++; 
                                }
                                else if (idx == 12) // Duration
                                {
