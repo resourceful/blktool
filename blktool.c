@@ -226,7 +226,7 @@ int     main    (int argc, char *argv [])
         char    buf [BUFSIZ];           /* a buffer                     */
         char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
         int     c;                      /* general-purpose              */
-        int     error = 0;              /* error checking purpose       */
+        int     SkipLine = 0;           /* Skip if pattern match fails  */
         int     idx;                    /* token index                  */
         FILE    *infp;                  /* input file                   */
         FILE    *outfp;                 /* output file                  */
@@ -341,6 +341,8 @@ int     main    (int argc, char *argv [])
                                else if (idx == 9) // + Separator but check for [0]
                                {
                                        idx++; 
+                                       if (!match ("+", tokptr))
+                                              SkipLine = 1;
                                }
                                else if (idx == 10) // Length 
                                {
@@ -350,6 +352,8 @@ int     main    (int argc, char *argv [])
                                else if (idx == 11) // ( separator or [0]
                                {
                                        idx++; 
+                                       if (!match ("+", tokptr))
+                                              SkipLine = 1;
                                }
                                else if (idx == 12) // Duration
                                {
@@ -359,22 +363,25 @@ int     main    (int argc, char *argv [])
                                /*      null the pointer        */
                                 strptr = (char *) NULL;
                         }
-
-                        if (RWBSSelect == RWBS_WRITE && match("*W*", RWBS) 
+                        /* printout only if the line has proper result */
+                        if (SkipLine == 0 )
+                        {
+                                if (RWBSSelect == RWBS_WRITE && match("*W*", RWBS) 
                                           && match("*C*", COMMAND)) 
-                        {
-                               FieldSelection(); 
-                        }
-                        else if (RWBSSelect == RWBS_READ && match("*R*", RWBS)
+                                {
+                                       FieldSelection(); 
+                                }
+                                else if (RWBSSelect == RWBS_READ && match("*R*", RWBS)
                                           && match("*C*", COMMAND)) 
-                        {
-                               FieldSelection(); 
+                                {
+                                       FieldSelection(); 
+                                }
+                                else if (RWBSSelect == RWBS_RD_WR && match("*C*", COMMAND)) 
+                                {
+                                       FieldSelection(); 
+                                } 
+                                (void) fprintf (outfp, "%s\n", row_of_fields);
                         }
-                        else if (RWBSSelect == RWBS_RD_WR && match("*C*", COMMAND)) 
-                        {
-                               FieldSelection(); 
-                        } 
-                        (void) fprintf (outfp, "%s\n", row_of_fields);
                 }
 
                 /*      close the input file            */
