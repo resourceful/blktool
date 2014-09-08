@@ -158,11 +158,11 @@ void calculate_cdf(char *in_file, int col_idx)
 
        /* open input file              */
        if ((infp = fopen (in_file, "r")) == (FILE *) NULL) {
-               (void) fprintf (stderr, "can't open %s\n", in_file);
+               (void) fprintf (stderr, "can't open input %s\n", in_file);
                exit (EXIT_FAILURE);
        }
        if ((outfp = fopen (out_file, "wt")) == (FILE *) NULL) {
-               (void) fprintf (stderr, "can't open %s\n", out_file);
+               (void) fprintf (stderr, "can't open output %s\n", out_file);
                exit (EXIT_FAILURE);
        }
 
