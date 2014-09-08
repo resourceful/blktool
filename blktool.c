@@ -60,8 +60,6 @@ char    separator[] = " \n";    /* token separator              */
 char    out_file[250];          /* output file                  */
 char    *out_ext = "_parsed";   /* output file extension        */
 char    *RWBS_ext;              /* read_write extension         */
-FILE    *infp;                  /* input file                   */
-FILE    *outfp;                 /* output file                  */
 
 char *help[]={
 " Blktrace output parser "VERSION_NUM,
@@ -147,26 +145,65 @@ int match (char *SRC, char *DEST)
 
 void calculate_cdf(char *in_file, int col_idx)
 {
+       int     idx = 1;                /* token index                  */
        char    out_file[250];          /* output file name             */
+       char    tmp_file[250];          /* tmp output file name         */
        char    *cdf_ext = "_cdf";      /* extension for CDF result     */
        char    buf [BUFSIZ];           /* a buffer                     */
        char    command[250];           /* command line for system      */
        char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
+       FILE    *infp;                  /* input file                   */
        FILE    *outfp;                 /* input file                   */
+       double  cumsum;                 /* cumulative sum               */ 
 
        /* open input file              */
        if ((infp = fopen (in_file, "r")) == (FILE *) NULL) {
                (void) fprintf (stderr, "can't open %s\n", in_file);
                exit (EXIT_FAILURE);
        }
+       if ((outfp = fopen (out_file, "wt")) == (FILE *) NULL) {
+               (void) fprintf (stderr, "can't open %s\n", out_file);
+               exit (EXIT_FAILURE);
+       }
 
-       snprintf(out_file, sizeof out_file, "%s%s", in_file, cdf_ext);
+       snprintf(tmp_file, sizeof out_file, "%s%s", in_file, "_temp");
 
        snprintf (command, sizeof command, "%s %d,%dn %s > %s",
                              "sort --parallel=10 --buffer-size=5G -k",
-                             col_idx, col_idx, in_file, out_file);
-       //system (command);
-       (void) fprintf (stderr, "%s\n", command);
+                             col_idx, col_idx, in_file, tmp_file);
+       if (vopt) (void) fprintf (stderr, "%s\n", command);
+       system (command);
+
+       /*      read the file for cdf           */
+       while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
+               /*      we have to point to buf */
+               strptr = buf;
+               /*      take the line apart     */
+               idx = 1 ;
+               /* only first column is used for cumulative sum for now */
+               while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
+                      if (idx == 1)  // only first column for now 
+                      {
+                             cumsum += atof (tokptr); 
+                      } 
+               }
+       }
+
+       rewind (infp);
+       while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
+               /*      we have to point to buf */
+               strptr = buf;
+               /*      take the line apart     */
+               idx = 1 ;
+               /* only first column is used for cumulative sum for now */
+               while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
+                      if (idx == 1)  // only first column for now 
+                      {
+                             cumsum += atof (tokptr); 
+                      } 
+               }
+       }
+       (void) fprintf (outfp, "%s\t%f", tokptr, (double) atof (tokptr)/cumsum*100);
 
        /*      close the input file            */
        if (fclose (infp)) {
@@ -180,7 +217,10 @@ int     main    (int argc, char *argv [])
         char    buf [BUFSIZ];           /* a buffer                     */
         char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
         int     c;                      /* general-purpose              */
+        int     error = 0;              /* error checking purpose       */
         int     idx;                    /* token index                  */
+        FILE    *infp;                  /* input file                   */
+        FILE    *outfp;                 /* output file                  */
 
         /*     Check for input file                                     */
         if (argc < 2)   show_help();
