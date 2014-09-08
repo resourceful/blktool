@@ -172,10 +172,10 @@ void calculate_cdf(char *in_file, int col_idx)
        snprintf (command, sizeof command, "%s %d,%dn %s > %s",
                              "sort --parallel=10 --buffer-size=5G -k",
                              col_idx, col_idx, in_file, tmp_file);
-       if (vopt) (void) fprintf (stderr, "%s\n", command);
+       if (vopt) (void) fprintf (stderr, "Command is : %s\n", command);
        system (command);
 
-       /*      read the file for cdf           */
+       /*     read the file for cumulative sum */
        while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
                /*      we have to point to buf */
                strptr = buf;
@@ -185,11 +185,15 @@ void calculate_cdf(char *in_file, int col_idx)
                while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
                       if (idx == 1)  // only first column for now 
                       {
+                             idx++;
                              cumsum += atof (tokptr); 
                       } 
+               strptr = (char *) NULL;
                }
        }
 
+       /*     rewind and calcuate cdf          */
+       if (vopt) (void) fprintf (stderr, "calculating CDF: \n");
        rewind (infp);
        while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
                /*      we have to point to buf */
@@ -200,11 +204,15 @@ void calculate_cdf(char *in_file, int col_idx)
                while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
                       if (idx == 1)  // only first column for now 
                       {
-                             cumsum += atof (tokptr); 
+                             idx++;
+                             if (vopt) (void) fprintf (stderr, "%s\t%f\n", 
+                                    tokptr, (double) atof (tokptr)/cumsum*100);
+                             (void) fprintf (outfp, "%s\t%f\n", 
+                                    tokptr, (double) atof (tokptr)/cumsum*100);
                       } 
+               strptr = (char *) NULL;
                }
        }
-       (void) fprintf (outfp, "%s\t%f", tokptr, (double) atof (tokptr)/cumsum*100);
 
        /*      close the input file            */
        if (fclose (infp)) {
