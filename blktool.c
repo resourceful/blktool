@@ -34,6 +34,15 @@ typedef enum
         CMD_COMPLETE,                 /* Complete                                      */
 } CMD_select_t;
 
+typedef enum
+{
+        CDF_TIME,                    /* Time                                            */
+        CDF_SECTOR,                  /* Sector No                                       */ 
+        CDF_LENGTH,                  /* Length                                          */
+        CDF_DURATION,                /* Duration                                        */
+} CDF_select_t;
+
+
 /* global variable */
 int     FieldSelectNo = 0;      /* field selector default 0     */
 char    row_of_fields[250];     /* temp line before printing    */
@@ -44,8 +53,10 @@ char    SECTORNO[15];           /* field names                  */
 char    LENGTH[10];             /* field names                  */
 char    DURATION[20];           /* field names                  */
 int     vopt = FALSE;           /* verbose option               */
+int     CDFopt = FALSE;         /* CDF option                   */
 int     RWBSSelect  = 0;        /* command selector default 0   */
-char    separator[] = " \n";      /* token separator              */
+int     CDFSelect  = 0;         /* CDF column default 0         */
+char    separator[] = " \n";    /* token separator              */
 char    out_file[250];          /* output file                  */
 char    *out_ext = "_parsed";   /* output file extension        */
 char    *RWBS_ext;              /* read_write extension         */
@@ -55,12 +66,13 @@ FILE    *outfp;                 /* output file                  */
 char *help[]={
 " Blktrace output parser "VERSION_NUM,
 " ",
-"  Usage: FILENAME [-v] [-f field_decision] [-r Read_Write] INPUTFILE",
+"  Usage: FILENAME [-v] [-c] [-f field_decision] [-r Read_Write] in_file",
 " ",
 "          It parses number of blkparsed file for specific format",
 "          Result file has extension of _parsed",
 "          ",
 "          -v Set verbose mode",
+"          -c Set CDF mode",
 "          -f Choose fields to print one of following (Default = 0)",
 "             Deafault output is Time, Command, RWBS, Sectorno, Length.",
 "             (0 = All except Duration, 1 = All with Duration, 2 = Only Duration)",
@@ -133,6 +145,36 @@ int match (char *SRC, char *DEST)
        return FALSE;
 }
 
+void calculate_cdf(char *in_file, int col_idx)
+{
+       char    out_file[250];          /* output file name             */
+       char    *cdf_ext = "_cdf";      /* extension for CDF result     */
+       char    buf [BUFSIZ];           /* a buffer                     */
+       char    command[250];           /* command line for system      */
+       char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
+       FILE    *outfp;                 /* input file                   */
+
+       /* open input file              */
+       if ((infp = fopen (in_file, "r")) == (FILE *) NULL) {
+               (void) fprintf (stderr, "can't open %s\n", in_file);
+               exit (EXIT_FAILURE);
+       }
+
+       snprintf(out_file, sizeof out_file, "%s%s", in_file, cdf_ext);
+
+       snprintf (command, sizeof command, "%s %d,%dn %s > %s",
+                             "sort --parallel=10 --buffer-size=5G -k",
+                             col_idx, col_idx, in_file, out_file);
+       //system (command);
+       (void) fprintf (stderr, "%s\n", command);
+
+       /*      close the input file            */
+       if (fclose (infp)) {
+               (void) fprintf (stderr, "can't close %s\n", in_file);
+               exit (EXIT_FAILURE);
+       }
+}
+
 int     main    (int argc, char *argv [])
 {
         char    buf [BUFSIZ];           /* a buffer                     */
@@ -151,6 +193,10 @@ int     main    (int argc, char *argv [])
                                 break;
                         case 'v':
                                 vopt = TRUE;
+                                break;
+                        case 'c':
+                                CDFopt = TRUE;
+                                CDFSelect = atoi(optarg);
                                 break;
                         case 'r':
                                 RWBSSelect = atoi(optarg);
@@ -183,6 +229,11 @@ int     main    (int argc, char *argv [])
                 if (vopt) {
                         (void) fprintf (stderr, "Processing %s...\n", argv [optind]);
                 }
+                if (CDFopt){
+                        calculate_cdf(argv [optind], CDFSelect);
+                        break; 
+                        return 0;
+                }
                 /*      open the input file             */
                 if ((infp = fopen (argv [optind], "r")) == (FILE *) NULL) {
                         (void) fprintf (stderr, "%s:\tcan't open %s\n", 
@@ -193,6 +244,7 @@ int     main    (int argc, char *argv [])
                 if ((outfp = fopen (out_file, "w")) == (FILE *) NULL){
                         (void) fprintf (stderr, "%s:\tcan't open %s\n", 
                                                             argv [0], out_file);
+                        exit (EXIT_FAILURE);
                 }
                 /*      get a line from the input file  */
                 while (fgets (buf, sizeof (buf), infp) != (char *) NULL) {
@@ -277,12 +329,16 @@ int     main    (int argc, char *argv [])
                 }
 
                 /*      close the input file            */
-                if (fclose (infp))
+                if (fclose (infp)) {
                         (void) fprintf (stderr, "%s:\tcan't close %s\n", 
                                                             argv [0], argv [optind]);
-                if (fclose (outfp))
+                        exit (EXIT_FAILURE);
+                }
+                if (fclose (outfp)) {
                         (void) fprintf (stderr, "%s:\tcan't close %s\n",
                                                             argv [0], out_file);
+                        exit (EXIT_FAILURE);
+                }
                 /*      bumpt the counter for next file */
                 optind++;
         }
