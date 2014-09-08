@@ -161,12 +161,13 @@ void calculate_cdf(char *in_file, int col_idx)
                (void) fprintf (stderr, "can't open input %s\n", in_file);
                exit (EXIT_FAILURE);
        }
+       snprintf(out_file, sizeof out_file, "%s%s", in_file, cdf_ext);
        if ((outfp = fopen (out_file, "wt")) == (FILE *) NULL) {
                (void) fprintf (stderr, "can't open output %s\n", out_file);
                exit (EXIT_FAILURE);
        }
 
-       snprintf(tmp_file, sizeof out_file, "%s%s", in_file, "_temp");
+       snprintf(tmp_file, sizeof tmp_file, "%s%s", in_file, "_temp");
 
        snprintf (command, sizeof command, "%s %d,%dn %s > %s",
                              "sort --parallel=10 --buffer-size=5G -k",
