@@ -10,27 +10,63 @@
 #ifndef FALSE
 #       define  FALSE   0
 #endif
-#define VERSION_NUM	"0.1"
+#define VERSION_NUM	"0.2"
 #define READFLAG     "O_RDONLY"
 #define WRITEFLAG    "O_RDWR|O_TRUNC"
 
 typedef enum
 {
-       FIELD_TM_CM_RW_SN_LN,        /* TIME, COMMAND, RWBS, SECTORNO, LENGTH           */
-       FIELD_TM_CM_RW_SN_LN_DR,     /* TIME, COMMAND, RWBS, SECTORNO, LENGTH, DURATION */ 
-       FIELD_DR,                    /* DURATION                                        */
+        FIELD_TM_CM_RW_SN_LN,        /* TIME, COMMAND, RWBS, SECTORNO, LENGTH           */
+        FIELD_TM_CM_RW_SN_LN_DR,     /* TIME, COMMAND, RWBS, SECTORNO, LENGTH, DURATION */ 
+        FIELD_DR,                    /* DURATION                                        */
+        FIELD_TM_SN,                 /* DURATION                                        */
 } field_select_t;
+
+typedef enum
+{
+        RWBS_WRITE,                   /* Write                                          */
+        RWBS_READ,                    /* READ                                           */
+        RWBS_RD_WR,                   /* READ and Write                                 */
+}  RWBS_select_t;
+
+typedef enum
+{
+        CMD_COMPLETE,                 /* Complete                                      */
+} CMD_select_t;
+
+/* global variable */
+int     FieldSelectNo = 0;      /* field selector default 0     */
+char    row_of_fields[250];     /* temp line before printing    */
+char    TIME[20];               /* field names                  */
+char    COMMAND[5];             /* field names                  */
+char    RWBS[5];                /* field names                  */
+char    SECTORNO[15];           /* field names                  */
+char    LENGTH[10];             /* field names                  */
+char    DURATION[20];           /* field names                  */
+int     vopt = FALSE;           /* verbose option               */
+int     RWBSSelect  = 0;        /* command selector default 0   */
+char    separator[] = " \n";      /* token separator              */
+char    out_file[250];          /* output file                  */
+char    *out_ext = "_parsed";   /* output file extension        */
+char    *RWBS_ext;              /* read_write extension         */
+FILE    *infp;                  /* input file                   */
+FILE    *outfp;                 /* output file                  */
 
 char *help[]={
 " Blktrace output parser "VERSION_NUM,
 " ",
-"  Usage: FILENAME [-v] [-f field_decision] INPUTFILE",
+"  Usage: FILENAME [-v] [-f field_decision] [-r Read_Write] INPUTFILE",
 " ",
 "          It parses number of blkparsed file for specific format",
 "          Result file has extension of _parsed",
-"          -v set verbose mode",
+"          ",
+"          -v Set verbose mode",
 "          -f Choose fields to print one of following (Default = 0)",
+"             Deafault output is Time, Command, RWBS, Sectorno, Length.",
 "             (0 = All except Duration, 1 = All with Duration, 2 = Only Duration)",
+"             (3 = TIME and Sector No)", 
+"          -r Choose commnads from read and write (Default = 0)", 
+"             (0 = Write, 1 = Read, 2 = Read and Write )",
 ""
 };
 
@@ -42,38 +78,82 @@ void show_help()
         return;
 }
 
+void FieldSelection()
+{
+        if (FieldSelectNo ==  FIELD_TM_CM_RW_SN_LN)
+        {
+        snprintf(row_of_fields, sizeof row_of_fields, 
+                "%s\t%s\t%s\t%s\t%s", 
+        TIME, COMMAND, RWBS, SECTORNO, LENGTH);
+        }
+        else if (FieldSelectNo == FIELD_TM_CM_RW_SN_LN_DR )
+        {
+               snprintf(row_of_fields, sizeof row_of_fields, 
+                           "%s\t%s\t%s\t%s\t%s\t%s", 
+                           TIME, COMMAND, RWBS, SECTORNO, LENGTH, DURATION);
+        }
+        else if (FieldSelectNo == FIELD_DR )
+        {
+               snprintf(row_of_fields, sizeof row_of_fields, 
+                           "%s", DURATION); 
+        }
+        else if (FieldSelectNo == FIELD_TM_SN )
+        {
+               snprintf(row_of_fields, sizeof row_of_fields, 
+                           "%s\t%s", TIME, SECTORNO); 
+        }
+
+        if (vopt) (void) fprintf (stdout, "%s \n", row_of_fields); 
+}
+
+/* Checks if a given string is in a string, with wild card support    *
+ * Returns TRUE only if the match is found.                         *
+*/
+int match (char *SRC, char *DEST)
+{
+       /* Reached the end of both strings                             */
+       if (*SRC == '\0' && *DEST == '\0')
+                return TRUE; 
+       /* Checks if the character after '*' is present in DEST.       *
+        * Assume that there is no '**' in the SRC.                    *
+       */
+       if (*SRC == '*' && *(SRC + 1) != '\0' && *DEST == '\0')
+                return FALSE;
+       /* If the SRC contains '?', or current characters of SRC and   *
+        * DEST match, keep on matching                                *
+       */
+       if (*SRC == '?' || *SRC == *DEST)
+                return match(SRC+1, DEST+1);
+       /* There are two possibilities when '*' is in SRC:             *
+        * 1) Look for current character of DEST                       *
+        * 2) Ignore current character in DEST                         *
+       */
+       if (*SRC == '*')
+                return match(SRC+1, DEST) || match(SRC, DEST+1);
+       return FALSE;
+}
+
 int     main    (int argc, char *argv [])
 {
         char    buf [BUFSIZ];           /* a buffer                     */
         char    *tokptr, *strptr = buf; /* a pointer to the buffer      */
         int     c;                      /* general-purpose              */
         int     idx;                    /* token index                  */
-        int     vopt = FALSE;           /* verbose option               */
-        int     FieldSelectNo = 0;      /* field selector default 0     */
-        char    separator[] = " ";      /* token separator              */
-        char    row_of_fields[250];     /* temp line before printing    */
-        char    TIME[20];               /* field names                  */
-        char    COMMAND[5];             /* field names                  */
-        char    RWBS[5];                /* field names                  */
-        char    SECTORNO[15];           /* field names                  */
-        char    LENGTH[10];             /* field names                  */
-        char    DURATION[20];           /* field names                  */
-        char    out_file[250];          /* output file                  */
-        char    *out_ext = "_parsed";   /* output file extension        */
-        FILE    *infp;                  /* input file                   */
-        FILE    *outfp;                 /* output file                  */
 
         /*     Check for input file                                     */
         if (argc < 2)   show_help();
 
         /*      process the command line arguments                      */
-        while ((c = getopt (argc, argv, "?vf:")) != EOF) {
+        while ((c = getopt (argc, argv, "?vc:r:f:")) != EOF) {
                 switch (c) {
                         case '?':
                                 show_help();
                                 break;
                         case 'v':
                                 vopt = TRUE;
+                                break;
+                        case 'r':
+                                RWBSSelect = atoi(optarg);
                                 break;
                         case 'f':
                                 FieldSelectNo = atoi(optarg);
@@ -84,6 +164,20 @@ int     main    (int argc, char *argv [])
                                 break;
                 }
         }
+
+        if (RWBSSelect == RWBS_WRITE)
+        {
+               RWBS_ext = "_W"; 
+        }
+        else if (RWBSSelect == RWBS_READ)
+        {
+               RWBS_ext = "_R";
+        }
+        else if (RWBSSelect == RWBS_RD_WR)
+        {
+               RWBS_ext = "_RW";
+        } 
+
         /*      now process any arguments supplied...   */
         while (optind != argc) {
                 if (vopt) {
@@ -95,7 +189,7 @@ int     main    (int argc, char *argv [])
                                                             argv [0], argv [optind]);
                         exit (EXIT_FAILURE);
                 }
-                snprintf(out_file, sizeof out_file, "%s%s", argv [optind], out_ext);
+                snprintf(out_file, sizeof out_file, "%s%s%s", argv [optind], RWBS_ext,  out_ext);
                 if ((outfp = fopen (out_file, "w")) == (FILE *) NULL){
                         (void) fprintf (stderr, "%s:\tcan't open %s\n", 
                                                             argv [0], out_file);
@@ -109,99 +203,79 @@ int     main    (int argc, char *argv [])
                         while ((tokptr = strtok (strptr, separator)) != (char *) NULL) {
                                if (idx == 1)  // Dev Maj/Min No 
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++;
                                } 
                                else if (idx == 2) // CPU No
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++;
                                } 
                                else if (idx == 3) // Sequence No
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++; 
                                } 
                                else if (idx == 4) // TIME 
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s\t", tokptr); 
-                                       //fprintf (outfp, "%s\t", tokptr);
                                        strcpy (TIME, tokptr);
-                                       //strcpy (row_of_fields, tokptr);
                                        idx++; 
                                } 
                                else if (idx == 5) // Process No
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++; 
                                }
                                else if (idx == 6) // Command
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s\t", tokptr); 
-                                       //fprintf (outfp, "%s\t", tokptr);
                                        strcpy (COMMAND, tokptr);
                                        idx++; 
                                }
                                else if (idx == 7) // RWBS
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s\t", tokptr); 
-                                       //fprintf (outfp, "%s\t", tokptr);
                                        strcpy (RWBS, tokptr);
                                        idx++; 
                                }
                                else if (idx == 8) // Sector No
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s\t", tokptr); 
-                                       //fprintf (outfp, "%s\t", tokptr);
                                        strcpy (SECTORNO, tokptr);
                                        idx++; 
                                }
                                else if (idx == 9) // + Separator but check for [0]
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++; 
                                }
                                else if (idx == 10) // Length 
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s \t", tokptr); 
-                                       //fprintf (outfp, "%s\t", tokptr);
                                        strcpy (LENGTH, tokptr);
                                        idx++; 
                                }
                                else if (idx == 11) // ( separator or [0]
                                {
-                                      // (void) fprintf (stdout, "%s\t", tokptr); 
                                        idx++; 
                                }
                                else if (idx == 12) // Duration
                                {
-                                       if (vopt) (void) fprintf (stdout, "%s \n", tokptr); 
-                                       //fprintf (outfp, "%s\n", tokptr);
                                        strcpy (DURATION, tokptr);
                                        idx++; 
                                }
                                /*      null the pointer        */
                                 strptr = (char *) NULL;
                         }
-                        if ( FieldSelectNo == 0 )
+
+                        if (RWBSSelect == RWBS_WRITE && match("*W*", RWBS) 
+                                          && match("*C*", COMMAND)) 
                         {
-                               snprintf(row_of_fields, sizeof row_of_fields, 
-                                           "%s\t%s\t%s\t%s\t%s", 
-                                           TIME, COMMAND, RWBS, SECTORNO, LENGTH);
+                               FieldSelection(); 
                         }
-                        else if ( FieldSelectNo == 1 )
+                        else if (RWBSSelect == RWBS_READ && match("*R*", RWBS)
+                                          && match("*C*", COMMAND)) 
                         {
-                               snprintf(row_of_fields, sizeof row_of_fields, 
-                                           "%s\t%s\t%s\t%s\t%s\t%s", 
-                                           TIME, COMMAND, RWBS, SECTORNO, LENGTH, DURATION);
+                               FieldSelection(); 
                         }
-                        else if ( FieldSelectNo == 2 )
+                        else if (RWBSSelect == RWBS_RD_WR && match("*C*", COMMAND)) 
                         {
-                               snprintf(row_of_fields, sizeof row_of_fields, 
-                                           "%s", DURATION); 
-                        }
+                               FieldSelection(); 
+                        } 
                         (void) fprintf (outfp, "%s\n", row_of_fields);
                 }
+
                 /*      close the input file            */
                 if (fclose (infp))
                         (void) fprintf (stderr, "%s:\tcan't close %s\n", 
